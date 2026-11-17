@@ -13,6 +13,13 @@
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Apply the saved theme before the page draws, so it never flashes the wrong colours.
+    (function () {
+      var t = localStorage.getItem('pitaka-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
   <header class="header">
@@ -40,6 +47,7 @@
           <input type="month" id="month-input" aria-label="Month" />
           <button class="icon-btn" data-action="next-month" data-icon="right" aria-label="Next month"></button>
         </div>
+        <button class="icon-btn theme-btn" data-action="toggle-theme" id="theme-btn" aria-label="Switch light or dark mode"></button>
         <button class="icon-btn mobile-only" data-view="settings" data-icon="settings" aria-label="Settings"></button>
       </div>
     </div>

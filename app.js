@@ -915,6 +915,17 @@ function renderSettings() {
       <button class="btn" data-action="change-currency">${icon('wallet')}Change</button>
     </div>
 
+    <div class="card appearance-card" style="margin-top:16px">
+      <div>
+        <div class="small muted">Appearance</div>
+        <div><b>${{ light: 'Light mode', dark: 'Dark mode', system: 'Same as device' }[themeChoice()]}</b></div>
+      </div>
+      <div class="segmented" role="group" aria-label="Appearance">
+        ${[['light', 'sun', 'Light'], ['dark', 'moon', 'Dark'], ['system', 'monitor', 'Auto']].map(([t, ic, label]) => `
+          <button data-action="set-theme" data-theme="${t}" class="${themeChoice() === t ? 'active' : ''}" aria-pressed="${themeChoice() === t}">${icon(ic)}${label}</button>`).join('')}
+      </div>
+    </div>
+
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
         <h2>${h('dots', 'Categories')}</h2>
@@ -1176,6 +1187,36 @@ function openSheet() {
 }
 function closeSheet() { $('#sheet')?.remove(); }
 
+/* ---------- Theme (light / dark / system) ---------- */
+const THEME_KEY = 'pitaka-theme';
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const themeChoice = () => localStorage.getItem(THEME_KEY) || 'system';
+const effectiveTheme = () => {
+  const t = themeChoice();
+  return t === 'system' ? (darkQuery.matches ? 'dark' : 'light') : t;
+};
+
+function applyTheme() {
+  const t = themeChoice();
+  if (t === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  const dark = effectiveTheme() === 'dark';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#111111' : '#ffffff');
+  const btn = $('#theme-btn');
+  if (btn) {
+    btn.innerHTML = icon(dark ? 'sun' : 'moon');
+    btn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  }
+}
+
+function setTheme(t) {
+  localStorage.setItem(THEME_KEY, t);
+  applyTheme();
+  if (ui.view === 'settings') render();
+}
+
+darkQuery.addEventListener?.('change', () => { if (themeChoice() === 'system') applyTheme(); });
+
 /* ---------- Currency ---------- */
 function openCurrencyDialog() {
   const cur = state.settings.currency;
@@ -1374,6 +1415,13 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); ui.animate = true; break;
     case 'quick-add': openSheet(); return;
     case 'change-currency': openCurrencyDialog(); return;
+    case 'toggle-theme': {
+      const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+      setTheme(next);
+      toast(`${next === 'dark' ? 'Dark' : 'Light'} mode on.`);
+      return;
+    }
+    case 'set-theme': setTheme(btn.dataset.theme); return;
     case 'fetch-rate': fetchRate(); return;
     case 'popup-rewards': closePopup(); go('rewards'); return;
     case 'this-month': ui.month = currentMonth(); break;
@@ -1654,6 +1702,7 @@ function buildDemoData() {
 
 /* ---------- Init ---------- */
 document.querySelectorAll('[data-icon]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
+applyTheme();
 render();
 checkRewards();
 dailyBudgetCheck();

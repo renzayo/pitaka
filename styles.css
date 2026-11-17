@@ -9,24 +9,43 @@
   --good: #15803d;
   --warn: #b45309;
   --bad: #b91c1c;
+  --gold: #e0a106;
   color-scheme: light;
 }
 
+/* Dark theme: chosen in the app, or "System" when the phone/computer is in dark mode */
+:root[data-theme="dark"] {
+  --bg: #111111;
+  --panel: #181818;
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --border: #2a2a2a;
+  --soft: #222222;
+  --accent: #f3f4f6;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --gold: #fbbf24;
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111111;
-    --panel: #181818;
-    --text: #f3f4f6;
-    --muted: #9ca3af;
-    --border: #2a2a2a;
-    --soft: #222222;
-    --accent: #f3f4f6;
-    --good: #4ade80;
-    --warn: #fbbf24;
-    --bad: #f87171;
-    color-scheme: dark;
+  :root:not([data-theme="light"]) {
+  --bg: #111111;
+  --panel: #181818;
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --border: #2a2a2a;
+  --soft: #222222;
+  --accent: #f3f4f6;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --gold: #fbbf24;
+  color-scheme: dark;
   }
 }
+
+body { transition: background-color .25s ease, color .25s ease; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -229,8 +248,6 @@ tfoot td { font-weight: 600; border-top: 1px solid var(--text); }
 @keyframes popup-in { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ===================== Icons & interaction ===================== */
-:root { --gold: #e0a106; }
-@media (prefers-color-scheme: dark) { :root { --gold: #fbbf24; } }
 
 .icon { width: 18px; height: 18px; flex: none; vertical-align: -3px; }
 .brand { display: inline-flex; align-items: center; gap: 8px; }
@@ -398,3 +415,12 @@ tfoot td { font-weight: 600; border-top: 1px solid var(--text); }
 .radio > span { display: flex; flex-direction: column; gap: 2px; }
 .convert-box { display: flex; flex-direction: column; gap: 8px; }
 .convert-box .form-actions { flex-wrap: wrap; }
+
+/* Theme switch */
+.theme-btn .icon { transition: transform .35s ease; }
+.theme-btn:active .icon { transform: rotate(45deg); }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; background: var(--soft); }
+.segmented button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.segmented button .icon { width: 16px; height: 16px; }
+.segmented button.active { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.appearance-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

@@ -31,6 +31,8 @@ Data is saved on each device separately. To move data between devices, use **Set
 | Monthly summary and tips for next month | **Summary** tab: category breakdown, 50/30/20 check, personalized tips, suggested budgets you can apply in one click |
 | Bill due dates | **Bills** tab: monthly or one-time bills, overdue/due-soon alerts, "Mark paid" (logs the expense automatically) |
 
+**Light / dark mode:** tap the sun/moon button at the top of any screen, or choose Light, Dark or Auto (follow the device) in Settings.
+
 **Settings** lets you manage categories (Need / Want / Saving), change the currency (just the symbol, or convert every amount using an exchange rate you type in or fetch for today), export and import JSON backups, or load demo data.
 
 ## Files
