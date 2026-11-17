@@ -87,7 +87,7 @@ function load() {
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 let state = load();
-const ui = { view: 'dashboard', month: currentMonth(), editing: { income: null, expense: null, bill: null }, expenseFilter: '' };
+const ui = { view: 'dashboard', month: currentMonth(), editing: { income: null, expense: null, bill: null }, expenseFilter: '', receipt: null };
 
 /* ---------- Queries ---------- */
 const catById = id => state.categories.find(c => c.id === id) || { id, name: 'Uncategorized', type: 'want', color: '#94a3b8' };
@@ -440,6 +440,7 @@ function renderDashboard() {
       <h2>Recent activity
         <span class="form-actions">
           <button class="btn small" data-view="expenses">Add expense</button>
+          <button class="btn small ghost" data-action="snap-receipt">Snap receipt</button>
           <button class="btn small ghost" data-view="income">Add income</button>
         </span>
       </h2>
@@ -502,6 +503,142 @@ function renderIncome() {
     </div>`;
 }
 
+/* ---------- Snap receipt ---------- */
+const OCR_SCRIPT = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+let ocrWorkerPromise = null;
+let ocrProgress = null;
+
+function receiptPanel() {
+  const r = ui.receipt;
+  if (!r) return '';
+  let body;
+  if (r.status === 'reading') {
+    body = `<div id="receipt-status">${esc(r.label)}</div><div class="small muted">Keep the app open — this can take 10–30 seconds.</div>`;
+  } else if (r.status === 'error') {
+    body = `<div class="neg">Couldn't read this receipt.</div><div class="small muted">${esc(r.error)} You can still type the details below.</div>`;
+  } else {
+    const p = r.parsed;
+    const missing = [!p.amount && 'total', !p.date && 'date'].filter(Boolean);
+    const note = !p.amount ? "Couldn't find the total — please type the amount."
+      : !p.amountConfident ? 'Not sure about the total — please double-check the amount.'
+      : missing.length ? `Couldn't find the ${missing.join(' or ')} — please check it.`
+      : 'Found the store, date and total.';
+    body = `<div><b>Receipt read.</b> Check the details below, then tap <b>Add expense</b>.</div>
+      <div class="small ${missing.length || !p.amountConfident ? 'badge warn' : 'muted'}">${note}</div>
+      <details class="small muted"><summary>Text read from the photo</summary><pre class="ocr-text">${esc(r.text.trim() || '(no text found)')}</pre></details>`;
+  }
+  return `<div class="receipt-panel">
+    ${r.preview ? `<img src="${r.preview}" alt="Receipt photo">` : ''}
+    <div class="receipt-body">${body}</div>
+    ${r.status !== 'reading' ? '<button class="link-btn" type="button" data-action="discard-receipt">Remove</button>' : ''}
+  </div>`;
+}
+
+function setReceiptStatus(label) {
+  if (!ui.receipt) return;
+  ui.receipt.label = label;
+  const el = $('#receipt-status');
+  if (el) el.textContent = label;
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Could not download the text reader. Check your internet connection.'));
+    document.head.appendChild(s);
+  });
+}
+
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = (async () => {
+      if (!window.Tesseract) await loadScript(OCR_SCRIPT);
+      return Tesseract.createWorker('eng', 1, { logger: m => ocrProgress && ocrProgress(m) });
+    })().catch(err => { ocrWorkerPromise = null; throw err; });
+  }
+  return ocrWorkerPromise;
+}
+
+/** Shrink, grey-scale and boost contrast so the text reader works faster and better. */
+async function prepareImage(file) {
+  let src;
+  try {
+    src = await createImageBitmap(file);
+  } catch {
+    src = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('That file is not a supported image.'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w0 = src.width, h0 = src.height;
+  const scale = Math.min(1, 1800 / Math.max(w0, h0));
+  const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(src, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const v = Math.max(0, Math.min(255, (g - 128) * 1.5 + 128));
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+function findCategoryId(name) {
+  if (!name) return null;
+  return state.categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.id || null;
+}
+
+async function scanReceipt(file) {
+  discardReceipt();
+  ui.receipt = { status: 'reading', preview: URL.createObjectURL(file), label: 'Preparing photo…' };
+  ui.editing.expense = null;
+  ui.view = 'expenses';
+  render();
+  window.scrollTo({ top: 0 });
+  const current = ui.receipt;
+  try {
+    const image = await prepareImage(file);
+    setReceiptStatus('Loading text reader…');
+    ocrProgress = m => {
+      if (m.status === 'recognizing text') setReceiptStatus(`Reading receipt… ${Math.round(m.progress * 100)}%`);
+      else if (/load|initializ/i.test(m.status)) setReceiptStatus('Loading text reader… (needs internet the first time)');
+    };
+    const worker = await getOcrWorker();
+    const { data } = await worker.recognize(image);
+    if (ui.receipt !== current) return; // removed while reading
+    const parsed = parseReceipt(data.text);
+    Object.assign(current, {
+      status: 'done', text: data.text, parsed,
+      fields: {
+        date: parsed.date || todayStr(),
+        amount: parsed.amount ?? '',
+        categoryId: findCategoryId(parsed.categoryName),
+        note: parsed.merchant,
+      },
+    });
+  } catch (err) {
+    if (ui.receipt !== current) return;
+    Object.assign(current, { status: 'error', error: err.message || String(err) });
+  } finally {
+    ocrProgress = null;
+  }
+  if (ui.view === 'expenses') render();
+}
+
+function discardReceipt() {
+  if (ui.receipt?.preview) URL.revokeObjectURL(ui.receipt.preview);
+  ui.receipt = null;
+}
+
 function renderExpenses() {
   const m = ui.month;
   const editing = ui.editing.expense ? state.expenses.find(e => e.id === ui.editing.expense) : null;
@@ -509,18 +646,24 @@ function renderExpenses() {
   if (ui.expenseFilter) items = items.filter(e => e.categoryId === ui.expenseFilter);
   const total = sum(items.map(e => e.amount));
   const otherId = state.categories.find(c => c.name === 'Food & Groceries')?.id || state.categories[0]?.id;
+  const draft = !editing && ui.receipt?.status === 'done' ? ui.receipt.fields : null;
+  const v = editing || draft || {};
 
   return `
     <div class="card">
-      <h2>${editing ? 'Edit expense' : 'Log expense'}</h2>
+      <h2>${editing ? 'Edit expense' : 'Log expense'}
+        ${editing ? '' : '<button class="btn small ghost" type="button" data-action="snap-receipt">Snap receipt</button>'}
+      </h2>
+      ${editing ? '' : receiptPanel()}
       <form class="form" data-form="expense">
-        <label class="field">Date<input type="date" name="date" required value="${editing ? editing.date : defaultDateFor(m)}"></label>
-        <label class="field">Category<select name="categoryId" required>${categoryOptions(editing ? editing.categoryId : (ui.expenseFilter || otherId))}</select></label>
-        <label class="field">Amount<input type="number" inputmode="decimal" name="amount" min="0.01" step="0.01" required placeholder="0.00" value="${editing?.amount ?? ''}"></label>
-        <label class="field">Description<input name="note" placeholder="e.g. Weekly groceries" value="${esc(editing?.note || '')}"></label>
+        <label class="field">Date<input type="date" name="date" required value="${v.date || defaultDateFor(m)}"></label>
+        <label class="field">Category<select name="categoryId" required>${categoryOptions(v.categoryId || ui.expenseFilter || otherId)}</select></label>
+        <label class="field">Amount<input type="number" inputmode="decimal" name="amount" min="0.01" step="0.01" required placeholder="0.00" value="${v.amount ?? ''}"></label>
+        <label class="field">Description<input name="note" placeholder="e.g. Weekly groceries" value="${esc(v.note || '')}"></label>
         <div class="form-actions">
           <button class="btn" type="submit">${editing ? 'Save changes' : 'Add expense'}</button>
           ${editing ? '<button class="btn ghost" type="button" data-action="cancel-edit" data-kind="expense">Cancel</button>' : ''}
+          ${draft ? '<button class="btn ghost" type="button" data-action="discard-receipt">Discard</button>' : ''}
         </div>
       </form>
     </div>
@@ -873,6 +1016,8 @@ document.addEventListener('click', e => {
       for (const b of Object.values(state.budgets)) delete b[id];
       save(); break;
     }
+    case 'snap-receipt': $('#receipt-file').click(); return;
+    case 'discard-receipt': discardReceipt(); break;
     case 'export': exportData(); return;
     case 'import': $('#import-file').click(); return;
     case 'demo':
@@ -909,7 +1054,7 @@ document.addEventListener('submit', e => {
       const data = { date: f.date, categoryId: f.categoryId, amount, note: f.note.trim() };
       const wasEditing = ui.editing.expense;
       if (wasEditing) Object.assign(state.expenses.find(x => x.id === wasEditing), data);
-      else state.expenses.push({ id: uid(), ...data });
+      else { state.expenses.push({ id: uid(), ...data }); discardReceipt(); }
       ui.editing.expense = null;
       const m = monthOf(f.date);
       if (m !== ui.month) ui.month = m;
@@ -976,6 +1121,12 @@ document.addEventListener('change', e => {
     save();
     toast('Category updated.');
   }
+});
+
+$('#receipt-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) scanReceipt(file);
 });
 
 $('#import-file').addEventListener('change', async e => {

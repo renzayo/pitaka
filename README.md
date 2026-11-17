@@ -23,6 +23,7 @@ Data is saved on each device separately. To move data between devices, use **Set
 |---|---|
 | Log income (with sources) | **Income** tab |
 | Log expenses by category | **Expenses** tab (each new expense shows how much budget is left in its category) |
+| Snap a receipt | **Snap receipt** on Home or Expenses: take or pick a photo and the app fills in the store, date, total and a category guess for you to check. Text is read on the device with Tesseract.js, and the first use needs internet to download it. |
 | Set a budget for each category, per month | **Budgets** tab (budgets carry over to the next month until you change them) |
 | Track how much budget is left in each category | **Dashboard** and **Budgets** (progress bars, plus an "on pace to overspend" warning) |
 | Monthly summary and tips for next month | **Summary** tab: category breakdown, 50/30/20 check, personalized tips, suggested budgets you can apply in one click |
