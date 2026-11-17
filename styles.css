@@ -382,3 +382,19 @@ tfoot td { font-weight: 600; border-top: 1px solid var(--text); }
   .nav-settings { display: none !important; }
   .mobile-only { display: inline-flex !important; }
 }
+
+/* Currency */
+.currency-card { display: flex; align-items: center; gap: 14px; }
+.cur-symbol { width: 52px; height: 52px; border-radius: 14px; background: var(--soft); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; flex: none; }
+.cur-body { flex: 1; min-width: 0; }
+.popup.plain { border-color: var(--border); }
+.popup.plain .popup-title { color: var(--text); }
+.popup-form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.popup-form select { width: 100%; }
+.choice { display: flex; flex-direction: column; gap: 8px; }
+.radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.radio:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.radio input { margin-top: 3px; }
+.radio > span { display: flex; flex-direction: column; gap: 2px; }
+.convert-box { display: flex; flex-direction: column; gap: 8px; }
+.convert-box .form-actions { flex-wrap: wrap; }

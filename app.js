@@ -13,7 +13,24 @@ const DEFAULT_CATEGORIES = [
   ['Education', 'need'], ['Personal Care', 'want'], ['Savings & Investments', 'saving'], ['Other', 'want'],
 ];
 const TYPE_LABELS = { need: 'Need', want: 'Want', saving: 'Saving' };
-const CURRENCIES = ['PHP', 'USD', 'EUR', 'GBP', 'JPY', 'SGD', 'AUD', 'CAD', 'HKD', 'AED', 'SAR', 'KRW', 'INR', 'MYR', 'IDR', 'THB'];
+const POPULAR_CURRENCIES = ['PHP', 'USD', 'EUR', 'GBP', 'JPY', 'SGD', 'AUD', 'CAD', 'NZD', 'HKD', 'CNY', 'TWD', 'KRW', 'AED', 'SAR', 'QAR', 'KWD', 'INR', 'MYR', 'IDR', 'THB', 'VND', 'CHF'];
+
+/** Every currency the browser knows, popular ones first. */
+function allCurrencies() {
+  let all = [];
+  try { all = Intl.supportedValuesOf('currency'); } catch { /* older browsers */ }
+  return [...new Set([...POPULAR_CURRENCIES, ...all])];
+}
+function currencyName(code) {
+  try { return new Intl.DisplayNames(undefined, { type: 'currency' }).of(code) || code; } catch { return code; }
+}
+function currencySymbol(code) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
+      .formatToParts(0).find(p => p.type === 'currency').value;
+  } catch { return code; }
+}
+const currencyLabel = code => `${code} — ${currencyName(code)} (${currencySymbol(code)})`;
 
 /* ---------- Utilities ---------- */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -886,10 +903,19 @@ function renderSettings() {
   const counts = {};
   for (const e of state.expenses) counts[e.categoryId] = (counts[e.categoryId] || 0) + 1;
   const cur = state.settings.currency;
-  const currencyList = CURRENCIES.includes(cur) ? CURRENCIES : [cur, ...CURRENCIES];
 
   return `
-    <div class="grid cols-2">
+    <div class="card currency-card">
+      <div class="cur-symbol">${esc(currencySymbol(cur))}</div>
+      <div class="cur-body">
+        <div class="small muted">Currency</div>
+        <div><b>${esc(cur)}</b> — ${esc(currencyName(cur))}</div>
+        <div class="small muted">Example: ${money(1234.5)}</div>
+      </div>
+      <button class="btn" data-action="change-currency">${icon('wallet')}Change</button>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
         <h2>${h('dots', 'Categories')}</h2>
         <div class="table-wrap"><table>
@@ -910,12 +936,6 @@ function renderSettings() {
       </div>
 
       <div class="stack">
-        <div class="card">
-          <h2>${h('settings', 'Preferences')}</h2>
-          <label class="field">Currency
-            <select id="currency">${currencyList.map(c => `<option ${c === cur ? 'selected' : ''}>${c}</option>`).join('')}</select>
-          </label>
-        </div>
         <div class="card">
           <h2>${h('wallet', 'Your data')}</h2>
           <p class="small muted">Everything is stored locally in this browser. Export a backup regularly, especially before clearing browser data.</p>
@@ -1156,6 +1176,82 @@ function openSheet() {
 }
 function closeSheet() { $('#sheet')?.remove(); }
 
+/* ---------- Currency ---------- */
+function openCurrencyDialog() {
+  const cur = state.settings.currency;
+  const list = allCurrencies();
+  const opt = c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${esc(currencyLabel(c))}</option>`;
+  const hasData = state.income.length || state.expenses.length || state.bills.length || Object.keys(state.budgets).length;
+  openPopup(`
+    <div class="popup plain" role="dialog" aria-modal="true" aria-labelledby="popup-title">
+      <div class="popup-title" id="popup-title">${icon('wallet')}Change currency</div>
+      <form data-form="currency" class="popup-form">
+        <label class="field">Currency
+          <select name="code" id="currency-select">
+            <optgroup label="Popular">${list.slice(0, POPULAR_CURRENCIES.length).map(opt).join('')}</optgroup>
+            <optgroup label="All currencies">${list.slice(POPULAR_CURRENCIES.length).map(opt).join('')}</optgroup>
+          </select>
+        </label>
+        ${hasData ? `
+        <div class="choice">
+          <label class="radio"><input type="radio" name="cur-mode" value="keep" checked>
+            <span><b>Just change the symbol</b><span class="small muted">Your numbers stay the same. Pick this if you already entered them in the new currency.</span></span></label>
+          <label class="radio"><input type="radio" name="cur-mode" value="convert">
+            <span><b>Convert all my amounts</b><span class="small muted">Recalculates every income, expense, budget and bill with an exchange rate.</span></span></label>
+        </div>
+        <div id="convert-box" class="convert-box hidden">
+          <label class="field"><span id="rate-label"></span>
+            <input id="rate-input" name="rate" type="number" inputmode="decimal" step="any" min="0" placeholder="Exchange rate"></label>
+          <div class="form-actions"><button type="button" class="btn small ghost" data-action="fetch-rate">${icon('trend')}Get today's rate</button><span id="rate-status" class="small muted"></span></div>
+        </div>` : '<input type="hidden" name="cur-mode" value="keep">'}
+        <div class="form-actions" style="margin-top:6px">
+          <button class="btn" type="submit">Save</button>
+          <button class="btn ghost" type="button" data-action="close-popup">Cancel</button>
+        </div>
+      </form>
+    </div>`);
+  updateRateLabel();
+}
+
+function updateRateLabel() {
+  const sel = $('#currency-select');
+  const label = $('#rate-label');
+  if (!sel || !label) return;
+  label.textContent = `1 ${state.settings.currency} = how many ${sel.value}?`;
+  const input = $('#rate-input');
+  if (input) input.value = '';
+  const status = $('#rate-status');
+  if (status) status.textContent = '';
+}
+
+async function fetchRate() {
+  const sel = $('#currency-select'), input = $('#rate-input'), status = $('#rate-status');
+  if (!sel || !input) return;
+  const from = state.settings.currency, to = sel.value;
+  status.textContent = 'Getting rate…';
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(from)}`);
+    const data = await res.json();
+    const rate = data?.rates?.[to];
+    if (!rate) throw new Error('no rate');
+    if ($('#currency-select')?.value !== to) return; // user picked another currency meanwhile
+    input.value = Number(rate.toPrecision(6));
+    const when = data.time_last_update_unix ? new Date(data.time_last_update_unix * 1000).toLocaleDateString() : 'today';
+    status.textContent = `Rate as of ${when}. You can edit it.`;
+  } catch {
+    status.textContent = "Couldn't get the rate. Check your internet, or type it in.";
+  }
+}
+
+/** Multiply every stored amount by `rate` (used when switching currency). */
+function convertAmounts(rate) {
+  const conv = x => Math.round(x * rate * 100) / 100;
+  for (const i of state.income) i.amount = conv(i.amount);
+  for (const e of state.expenses) e.amount = conv(e.amount);
+  for (const b of state.bills) b.amount = conv(b.amount);
+  for (const m of Object.values(state.budgets)) for (const id of Object.keys(m)) m[id] = conv(m[id]);
+}
+
 /* ---------- Budget warnings ---------- */
 const NEAR_LIMIT = 0.8; // warn at 80% of a category budget
 
@@ -1277,6 +1373,8 @@ document.addEventListener('click', e => {
     case 'prev-month': ui.month = shiftMonth(ui.month, -1); ui.animate = true; break;
     case 'next-month': ui.month = shiftMonth(ui.month, 1); ui.animate = true; break;
     case 'quick-add': openSheet(); return;
+    case 'change-currency': openCurrencyDialog(); return;
+    case 'fetch-rate': fetchRate(); return;
     case 'popup-rewards': closePopup(); go('rewards'); return;
     case 'this-month': ui.month = currentMonth(); break;
     case 'cancel-edit': ui.editing[kind] = null; break;
@@ -1406,6 +1504,21 @@ document.addEventListener('submit', e => {
       toast(`Budgets saved for ${monthLabel(ui.month)}.`);
       break;
     }
+    case 'currency': {
+      const from = state.settings.currency, to = f.code;
+      if (to === from) { closePopup(); return; }
+      let note = 'Amounts were not changed.';
+      if (f['cur-mode'] === 'convert') {
+        const rate = parseFloat(f.rate);
+        if (!(rate > 0)) return toast('Enter the exchange rate, or tap "Get today\'s rate".');
+        convertAmounts(rate);
+        note = `All amounts converted at 1 ${from} = ${rate} ${to}.`;
+      }
+      state.settings.currency = to;
+      closePopup();
+      toast(`Currency changed to ${to}. ${note}`);
+      break;
+    }
     case 'category': {
       const name = f.name.trim();
       if (state.categories.some(c => c.name.toLowerCase() === name.toLowerCase())) return toast('That category already exists.');
@@ -1424,7 +1537,8 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'month-input' && t.value) { ui.month = t.value; render(); return; }
   if (t.id === 'expense-filter') { ui.expenseFilter = t.value; render(); return; }
-  if (t.id === 'currency') { state.settings.currency = t.value; save(); toast(`Currency set to ${t.value}.`); return; }
+  if (t.id === 'currency-select') { updateRateLabel(); return; }
+  if (t.name === 'cur-mode') { $('#convert-box')?.classList.toggle('hidden', t.value !== 'convert'); if (t.value === 'convert') $('#rate-input')?.focus(); return; }
   if (t.id === 'bill-recurrence') {
     document.querySelectorAll('[data-rec]').forEach(el => el.classList.toggle('hidden', el.dataset.rec !== t.value));
     return;
