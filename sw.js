@@ -1,8 +1,8 @@
 // Service worker: lets the app open offline once it has been loaded.
 // Bump CACHE when you change files so phones pick up the new version.
-const CACHE = 'pitaka-v10';
+const CACHE = 'pitaka-v11';
 const FILES = [
-  './', './index.html', './styles.css', './app.js', './receipt.js', './icons.js', './rewards.js', './manifest.webmanifest',
+  './', './index.html', './styles.css', './app.js', './receipt.js', './icons.js', './rewards.js', './goals.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png',
 ];
 

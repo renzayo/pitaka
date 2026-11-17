@@ -77,6 +77,7 @@ function defaultState() {
     expenses: [],
     budgets: {},
     bills: [],
+    goals: [],
     stats: { receiptsSnapped: 0 },
     rewards: { stars: null, badges: [] },
   };
@@ -92,6 +93,7 @@ function normalize(d) {
     expenses: Array.isArray(d.expenses) ? d.expenses : [],
     budgets: d.budgets && typeof d.budgets === 'object' ? d.budgets : {},
     bills: Array.isArray(d.bills) ? d.bills : [],
+    goals: Array.isArray(d.goals) ? d.goals : [],
     stats: { ...base.stats, ...(d.stats || {}) },
     rewards: { ...base.rewards, ...(d.rewards || {}) },
   };
@@ -252,6 +254,10 @@ function buildInsights(m) {
     if (!b) continue;
     const s = spent[id] || 0;
     const c = catById(id);
+    if (c.type === 'saving') {
+      if (el === 1 && s >= b) out.push({ level: 'good', title: `Savings target reached`, text: `You put ${money(s)} into ${c.name}, meeting your ${money(b)} target.` });
+      continue;
+    }
     if (s > b) {
       out.push({ level: 'warn', title: `${c.name} is over budget`, text: `Spent ${money(s)} of ${money(b)} — ${money(s - b)} over (${pct(s / b - 1)}). Next month, try a weekly limit of about ${money(b / 4.345)} and check it every week.` });
     } else if (inProgress && s / el > b * 1.05) {
@@ -313,6 +319,16 @@ function buildInsights(m) {
   if (pExp > 0 && !inProgress) {
     if (exp < pExp) out.push({ level: 'good', title: `Spending down ${pct(1 - exp / pExp)} vs last month`, text: `You spent ${money(pExp - exp)} less than in ${monthLabel(prev, { month: 'long' })}. Keep it up!` });
     else if (exp > pExp * 1.1) out.push({ level: 'warn', title: `Spending up ${pct(exp / pExp - 1)} vs last month`, text: `You spent ${money(exp - pExp)} more than in ${monthLabel(prev, { month: 'long' })}.` });
+  }
+
+  // Savings goals (only for the current month's summary)
+  if (m === currentMonth()) {
+    for (const g of state.goals) {
+      const gi = goalInfo(g);
+      if (gi.done || !g.deadline) continue;
+      if (gi.overdue) out.push({ level: 'warn', title: `${g.name}: target date passed`, text: `You still need ${money(gi.left)}. Pick a new target date that feels realistic.` });
+      else if (!gi.onTrack) out.push({ level: 'info', title: `${g.name} goal is behind schedule`, text: `Save about ${money(gi.needPerMonth)} a month to reach ${money(g.target)} on time.` });
+    }
   }
 
   const order = { danger: 0, warn: 1, info: 2, good: 3 };
@@ -382,6 +398,7 @@ function categoryOptions(selected, includeBlank = false) {
 
 function budgetRow(id, budget, spentAmt, m) {
   const ratio = budget ? spentAmt / budget : 0;
+  if (catById(id).type === 'saving') return savingTargetRow(id, budget, spentAmt, ratio);
   const cls = ratio >= 1 ? 'over' : ratio >= 0.8 ? 'warn' : '';
   const remaining = budget - spentAmt;
   const el = elapsed(m);
@@ -396,6 +413,19 @@ function budgetRow(id, budget, spentAmt, m) {
       <div class="meta">
         <span class="${remaining < 0 ? 'neg' : ''}">${remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over budget`}</span>
         <span>${pace} ${pct(ratio)} used</span>
+      </div>
+    </div>`;
+}
+
+/** Savings categories: the budget is a target to reach, so more is better. */
+function savingTargetRow(id, target, saved, ratio) {
+  return `
+    <div class="budget-row">
+      <div class="top"><span class="chip">${chip(id)}${ratio >= 1 ? `<span title="Savings target reached — earning a star">${icon('star', 'star-ic')}</span>` : ''}</span><span class="nowrap"><b>${money(saved)}</b> <span class="muted">/ ${money(target)}</span></span></div>
+      <div class="bar goal-bar ${ratio >= 1 ? 'done' : ''}"><span style="width:${Math.min(100, ratio * 100)}%"></span></div>
+      <div class="meta">
+        <span class="${ratio >= 1 ? 'pos' : ''}">${ratio >= 1 ? 'Savings target reached' : `${money(target - saved)} to go`}</span>
+        <span>${pct(ratio)} saved</span>
       </div>
     </div>`;
 }
@@ -455,6 +485,7 @@ function renderDashboard() {
     </div>
 
     ${rewardStrip()}
+    ${goalsHomeCard()}
 
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
@@ -968,6 +999,7 @@ const VIEWS = {
   budgets: ['Budgets', renderBudgets],
   bills: ['Bills', renderBills],
   summary: ['Monthly Summary', renderSummary],
+  goals: ['Savings Goals', renderGoals],
   rewards: ['Rewards', renderRewards],
   settings: ['Settings', renderSettings],
 };
@@ -1039,6 +1071,7 @@ function renderRewards() {
         <div class="list-item"><span>Save 20% or more of your income</span><span class="stars">+2${icon('star', 'star-ic')}</span></div>
         <div class="list-item"><span>Pay every bill on time</span><span class="stars">+1${icon('star', 'star-ic')}</span></div>
         <div class="list-item"><span>Log something 7 days in a row</span><span class="stars">+1${icon('star', 'star-ic')}</span></div>
+        <div class="list-item"><span>Reach a savings goal</span><span class="stars">+${GOAL_STARS}${icon('star', 'star-ic')}</span></div>
       </div>
     </div>
 
@@ -1060,6 +1093,7 @@ function renderRewards() {
           <span><b>${monthLabel(m.month)}</b><div class="small muted">${m.within} of ${m.budgeted} categories on budget${m.perfect ? ' · Perfect month' : ''}${m.saver ? ' · Saved 20%+' : ''}${m.billsOnTime ? ' · Bills on time' : ''}</div></span>
           <span class="stars">${m.total}${icon('star', 'star-ic')}</span>
         </div>`).join('') : empty('Your first stars arrive at the end of this month.')}
+      ${r.goalStars ? `<div class="list-item"><span><b>Savings goals reached</b><div class="small muted">${r.goalsReached} goal${r.goalsReached === 1 ? '' : 's'} × ${GOAL_STARS} stars</div></span><span class="stars">${r.goalStars}${icon('star', 'star-ic')}</span></div>` : ''}
       ${r.habitStars ? `<div class="list-item"><span><b>Logging streaks</b><div class="small muted">1 star for every 7 days in a row</div></span><span class="stars">${r.habitStars}${icon('star', 'star-ic')}</span></div>` : ''}
     </div>`;
 }
@@ -1181,6 +1215,8 @@ function openSheet() {
         <button class="sheet-btn" data-action="snap-receipt">${icon('camera')}Snap receipt</button>
         <button class="sheet-btn" data-view="income">${icon('income')}Add income</button>
         <button class="sheet-btn" data-view="bills">${icon('bills')}Add bill</button>
+        <button class="sheet-btn" data-action="sheet-goal">${icon('piggy')}Add to goal</button>
+        <button class="sheet-btn" data-view="budgets">${icon('budget')}Set budget</button>
       </div>
     </div>`;
   document.body.appendChild(el);
@@ -1301,7 +1337,7 @@ function budgetWarnings(m = currentMonth()) {
   const { budgets } = budgetsFor(m);
   const spent = spentByCategory(m);
   return Object.entries(budgets)
-    .filter(([, b]) => b > 0)
+    .filter(([id, b]) => b > 0 && catById(id).type !== 'saving')
     .map(([id, b]) => ({ id, name: catById(id).name, spent: spent[id] || 0, budget: b, ratio: (spent[id] || 0) / b }))
     .filter(w => w.ratio >= NEAR_LIMIT)
     .sort((a, b) => b.ratio - a.ratio);
@@ -1368,7 +1404,7 @@ function render() {
   const [title, fn] = VIEWS[ui.view];
   $('#view-title').textContent = title;
   $('#month-input').value = ui.month;
-  $('#month-picker').hidden = ui.view === 'settings' || ui.view === 'rewards';
+  $('#month-picker').hidden = ['settings', 'rewards', 'goals'].includes(ui.view);
   renderAlerts();
   const view = $('#view');
   view.innerHTML = fn();
@@ -1415,6 +1451,15 @@ document.addEventListener('click', e => {
     case 'next-month': ui.month = shiftMonth(ui.month, 1); ui.animate = true; break;
     case 'quick-add': openSheet(); return;
     case 'change-currency': openCurrencyDialog(); return;
+    case 'sheet-goal': closeSheet(); go('goals'); return;
+    case 'goal-new': openGoalForm(null, { name: btn.dataset.name, target: btn.dataset.target }); return;
+    case 'goal-new-after': closePopup(); go('goals'); openGoalForm(null); return;
+    case 'goal-edit': openGoalForm(state.goals.find(g => g.id === id)); return;
+    case 'goal-add': openGoalMoneyForm(state.goals.find(g => g.id === id), 'add'); return;
+    case 'goal-withdraw': openGoalMoneyForm(state.goals.find(g => g.id === id), 'withdraw'); return;
+    case 'fill-amount': { const input = $('#popup input[name=amount]'); if (input) input.value = btn.dataset.amount; return; }
+    case 'goal-delete': if (!deleteGoal(id)) return; save(); toast('Goal deleted.'); break;
+    case 'goal-del-entry': if (!deleteGoalEntry(id, btn.dataset.entry)) return; save(); toast('Entry removed.'); break;
     case 'toggle-theme': {
       const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
       setTheme(next);
@@ -1436,6 +1481,10 @@ document.addEventListener('click', e => {
       if (!confirm('Delete this expense?')) return;
       const exp = state.expenses.find(x => x.id === id);
       state.expenses = state.expenses.filter(x => x.id !== id);
+      if (exp?.goalId) { // keep the savings goal in step
+        const g = state.goals.find(x => x.id === exp.goalId);
+        if (g) g.contributions = g.contributions.filter(c => c.expenseId !== id);
+      }
       if (exp?.billId) { // keep bill payment record consistent
         const bill = state.bills.find(b => b.id === exp.billId);
         if (bill?.paid) for (const [k, p] of Object.entries(bill.paid)) if (p.expenseId === id) p.expenseId = null;
@@ -1552,6 +1601,8 @@ document.addEventListener('submit', e => {
       toast(`Budgets saved for ${monthLabel(ui.month)}.`);
       break;
     }
+    case 'goal': if (!saveGoalForm(f)) return; break;
+    case 'goal-money': if (!saveGoalMoney(f)) return; break;
     case 'currency': {
       const from = state.settings.currency, to = f.code;
       if (to === from) { closePopup(); return; }
@@ -1697,6 +1748,19 @@ function buildDemoData() {
     }
     d.bills.push(bill);
   }
+
+  // Savings goals: the monthly "Emergency fund" transfers above feed the first goal.
+  const savingsId = cat('Savings & Investments');
+  const ef = { id: uid(), name: 'Emergency fund', target: 60000, deadline: `${shiftMonth(cur, 8)}-28`, createdAt: `${shiftMonth(cur, -3)}-01`, contributions: [
+    { id: uid(), date: `${shiftMonth(cur, -3)}-01`, amount: 15000, note: 'Starting amount' },
+  ] };
+  for (const e of d.expenses.filter(x => x.categoryId === savingsId)) {
+    e.goalId = ef.id;
+    ef.contributions.push({ id: uid(), date: e.date, amount: e.amount, note: 'From salary', expenseId: e.id });
+  }
+  const trip = { id: uid(), name: 'Japan trip', target: 45000, deadline: `${shiftMonth(cur, 5)}-15`, createdAt: `${shiftMonth(cur, -2)}-01`,
+    contributions: [2, 1, 0].map(i => ({ id: uid(), date: `${shiftMonth(cur, -i)}-${pad(i === 0 ? Math.min(today, 5) : 5)}`, amount: 4000, note: 'Travel jar' })) };
+  d.goals = [ef, trip];
   return d;
 }
 

@@ -23,8 +23,10 @@ function monthRewards(m) {
   const spent = spentByCategory(m);
   const items = [];
 
-  const within = ids.filter(id => (spent[id] || 0) <= budgets[id]);
-  for (const id of within) items.push({ stars: 1, label: `${catById(id).name} stayed within budget`, categoryId: id });
+  // Spending categories earn a star for staying under budget; savings categories for reaching their target.
+  const isSaving = id => catById(id).type === 'saving';
+  const within = ids.filter(id => isSaving(id) ? (spent[id] || 0) >= budgets[id] : (spent[id] || 0) <= budgets[id]);
+  for (const id of within) items.push({ stars: 1, label: isSaving(id) ? `Reached your ${catById(id).name} target` : `${catById(id).name} stayed within budget`, categoryId: id });
   const perfect = within.length === ids.length;
   if (perfect) items.push({ stars: 3, label: 'Perfect month: every category on budget' });
 
@@ -95,6 +97,8 @@ const BADGES = [
   { id: 'saver', icon: 'piggy', name: 'Super Saver', desc: 'Save 20% of your income in a month' },
   { id: 'perfect', icon: 'trophy', name: 'Perfect Month', desc: 'Keep every category on budget for a month' },
   { id: 'streak-3', icon: 'medal', name: 'Hat Trick', desc: '3 perfect months in a row' },
+  { id: 'dreamer', icon: 'flag', name: 'Dreamer', desc: 'Create a savings goal' },
+  { id: 'goal-getter', icon: 'piggy', name: 'Goal Getter', desc: 'Reach a savings goal' },
   { id: 'stars-25', icon: 'star', name: 'Star Collector', desc: 'Earn 25 stars' },
   { id: 'stars-100', icon: 'star', name: 'Superstar', desc: 'Earn 100 stars' },
 ];
@@ -106,7 +110,9 @@ function computeRewards() {
   const log = loggingStreaks();
   const habitStars = log.runs.reduce((a, r) => a + Math.floor(r / 7), 0); // 1 star per full week logged
   const monthStars = history.reduce((a, h) => a + h.total, 0);
-  const stars = monthStars + habitStars;
+  const goalsReached = state.goals.filter(g => g.completedAt).length;
+  const goalStars = goalsReached * GOAL_STARS;
+  const stars = monthStars + habitStars + goalStars;
   const perfect = perfectStreaks(months);
 
   let level = 0;
@@ -124,9 +130,11 @@ function computeRewards() {
   if (perfect.best >= 3) earned.add('streak-3');
   if (stars >= 25) earned.add('stars-25');
   if (stars >= 100) earned.add('stars-100');
+  if (state.goals.length) earned.add('dreamer');
+  if (goalsReached) earned.add('goal-getter');
 
   return {
-    stars, monthStars, habitStars, history,
+    stars, monthStars, habitStars, goalStars, goalsReached, history,
     level: level + 1, levelName: LEVELS[level].name,
     nextLevel: next ? { name: next.name, need: next.min - stars, progress: (stars - LEVELS[level].min) / (next.min - LEVELS[level].min) } : null,
     logStreak: log, perfectStreak: perfect,

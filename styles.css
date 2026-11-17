@@ -424,3 +424,46 @@ tfoot td { font-weight: 600; border-top: 1px solid var(--text); }
 .segmented button .icon { width: 16px; height: 16px; }
 .segmented button.active { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .appearance-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Savings goals */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 22px 0 12px; }
+.section-head h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.section-head h2 .h { display: inline-flex; align-items: center; gap: 8px; }
+.section-head h2 .icon { color: var(--muted); }
+.goal-card { display: flex; flex-direction: column; gap: 8px; }
+.goal-card.done { border-color: var(--gold); }
+.goal-top { display: flex; align-items: center; gap: 12px; }
+.goal-ic { width: 42px; height: 42px; border-radius: 12px; background: var(--soft); display: inline-flex; align-items: center; justify-content: center; flex: none; color: var(--good); }
+.goal-card.done .goal-ic { color: var(--gold); }
+.goal-ic .icon { width: 22px; height: 22px; }
+.goal-title { flex: 1; min-width: 0; }
+.goal-title b { font-size: 16px; }
+.goal-actions { display: flex; gap: 2px; }
+.goal-amounts { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.goal-saved { font-size: 24px; font-weight: 700; }
+.goal-pct { margin-left: auto; font-weight: 600; }
+.goal-bar { height: 10px; position: relative; }
+.goal-bar > span { background: var(--good); }
+.goal-bar.done > span { background: var(--gold); }
+.goal-bar > i { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--panel); opacity: .7; }
+.goal-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.goal-meta .badge .icon { width: 13px; height: 13px; vertical-align: -2px; }
+.goal-buttons { margin-top: 4px; flex-wrap: wrap; }
+.goal-history summary { cursor: pointer; padding: 4px 0; }
+.goal-history .act-btn { padding: 3px; margin-left: 4px; }
+.goal-history .act-btn .icon { width: 14px; height: 14px; }
+.goal-empty { text-align: center; padding: 32px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.goal-empty p { max-width: 420px; margin: 0 0 8px; }
+.goal-empty-ic { width: 72px; height: 72px; border-radius: 50%; background: var(--soft); color: var(--good); display: flex; align-items: center; justify-content: center; }
+.goal-empty-ic .icon { width: 38px; height: 38px; }
+.goal-presets { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.goal-prompt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.goal-prompt:hover { border-color: var(--good); }
+.goal-hero .big-star { fill: none; color: var(--gold); }
+.quick-amounts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.sheet-grid { grid-template-columns: repeat(3, 1fr); }
+.sheet-btn { font-size: 13px; text-align: center; }
+@media (max-width: 640px) {
+  .nav-btn { font-size: 9.5px; }
+  .goal-saved { font-size: 22px; }
+}
