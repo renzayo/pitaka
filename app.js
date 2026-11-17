@@ -168,6 +168,7 @@ function markBillPaid(billId, m) {
   bill.paid[m] = { date: todayStr(), expenseId };
   save();
   toast(`${bill.name} marked as paid${expenseId ? ' and logged as an expense' : ''}.`);
+  if (expenseId) setTimeout(() => checkCategoryBudget(bill.categoryId, currentMonth()), 0);
 }
 
 function unmarkBillPaid(billId, m) {
@@ -924,6 +925,76 @@ const VIEWS = {
   settings: ['Settings', renderSettings],
 };
 
+/* ---------- Budget warnings ---------- */
+const NEAR_LIMIT = 0.8; // warn at 80% of a category budget
+
+/** Categories at or above 80% of their budget for a month, worst first. */
+function budgetWarnings(m = currentMonth()) {
+  const { budgets } = budgetsFor(m);
+  const spent = spentByCategory(m);
+  return Object.entries(budgets)
+    .filter(([, b]) => b > 0)
+    .map(([id, b]) => ({ id, name: catById(id).name, spent: spent[id] || 0, budget: b, ratio: (spent[id] || 0) / b }))
+    .filter(w => w.ratio >= NEAR_LIMIT)
+    .sort((a, b) => b.ratio - a.ratio);
+}
+
+function warningText(w) {
+  if (w.spent > w.budget) return `${money(w.spent - w.budget)} over budget`;
+  if (w.spent === w.budget) return 'Budget fully used';
+  return `${pct(w.ratio)} used — only ${money(w.budget - w.spent)} left`;
+}
+
+function closePopup() {
+  const el = $('#popup');
+  if (el) el.remove();
+}
+
+function showBudgetPopup(list, title) {
+  if (!list.length) return;
+  closePopup();
+  const anyOver = list.some(w => w.spent > w.budget);
+  const el = document.createElement('div');
+  el.id = 'popup';
+  el.className = 'popup-backdrop';
+  el.innerHTML = `
+    <div class="popup" role="alertdialog" aria-modal="true" aria-labelledby="popup-title">
+      <div class="popup-title" id="popup-title">${esc(title || (anyOver ? 'Over budget' : 'Almost at your budget'))}</div>
+      <ul class="popup-list">${list.map(w => `
+        <li>
+          <div class="row"><b>${esc(w.name)}</b><span class="nowrap">${money(w.spent)} / ${money(w.budget)}</span></div>
+          <div class="bar over"><span style="width:${Math.min(100, w.ratio * 100)}%"></span></div>
+          <div class="small">${warningText(w)}</div>
+        </li>`).join('')}
+      </ul>
+      <div class="form-actions">
+        <button class="btn danger-solid" data-action="close-popup">OK</button>
+        <button class="btn ghost" data-action="popup-budgets">See budgets</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector('[data-action=close-popup]').focus();
+  if (navigator.vibrate) navigator.vibrate(150);
+}
+
+/** After spending in a category, pop up if it is now near or over budget. Returns true if shown. */
+function checkCategoryBudget(categoryId, m) {
+  const w = budgetWarnings(m).find(x => x.id === categoryId);
+  if (!w) return false;
+  showBudgetPopup([w], w.spent > w.budget ? `${w.name} is over budget` : `${w.name} is almost at its budget`);
+  return true;
+}
+
+/** Once a day, when the app opens, list every category that is near or over budget. */
+function dailyBudgetCheck() {
+  const key = 'pitaka-budget-check-day';
+  if (localStorage.getItem(key) === todayStr()) return;
+  const list = budgetWarnings();
+  if (!list.length) return;
+  localStorage.setItem(key, todayStr());
+  showBudgetPopup(list, 'Budget check');
+}
+
 function renderAlerts() {
   const items = billsNeedingAttention();
   const overdue = items.filter(i => i.status === 'overdue');
@@ -931,6 +1002,8 @@ function renderAlerts() {
   let html = '';
   if (overdue.length) html += `<div class="alert danger"><span><b>${overdue.length} overdue bill${overdue.length > 1 ? 's' : ''}:</b> ${overdue.map(i => `${esc(i.bill.name)} (${money(i.bill.amount)})`).join(', ')}</span>${ui.view !== 'bills' ? '<button class="link-btn" data-view="bills">View bills</button>' : ''}</div>`;
   if (soon.length) html += `<div class="alert warn"><span><b>Due soon:</b> ${soon.map(i => `${esc(i.bill.name)} — ${statusText(i).toLowerCase()}`).join(', ')}</span></div>`;
+  const warnings = budgetWarnings();
+  if (warnings.length) html += `<div class="alert danger"><span><b>Budget alert:</b> ${warnings.map(w => `${esc(w.name)} — ${w.spent > w.budget ? `${money(w.spent - w.budget)} over` : `${pct(w.ratio)} used`}`).join(', ')}</span>${ui.view !== 'budgets' ? '<button class="link-btn" data-view="budgets">See budgets</button>' : ''}</div>`;
   $('#alerts').innerHTML = ui.view === 'settings' ? '' : html;
 }
 
@@ -963,6 +1036,7 @@ function go(view) {
 }
 
 document.addEventListener('click', e => {
+  if (e.target.id === 'popup') { closePopup(); return; }
   const viewBtn = e.target.closest('[data-view]');
   if (viewBtn) { go(viewBtn.dataset.view); return; }
   const btn = e.target.closest('[data-action]');
@@ -1016,6 +1090,8 @@ document.addEventListener('click', e => {
       for (const b of Object.values(state.budgets)) delete b[id];
       save(); break;
     }
+    case 'close-popup': closePopup(); return;
+    case 'popup-budgets': closePopup(); ui.month = currentMonth(); go('budgets'); return;
     case 'snap-receipt': $('#receipt-file').click(); return;
     case 'discard-receipt': discardReceipt(); break;
     case 'export': exportData(); return;
@@ -1061,7 +1137,9 @@ document.addEventListener('submit', e => {
       const b = budgetsFor(m).budgets[f.categoryId];
       const left = b ? b - (spentByCategory(m)[f.categoryId] || 0) : null;
       const name = catById(f.categoryId).name;
-      toast(`${wasEditing ? 'Expense updated.' : `Expense of ${money(amount)} added.`}${left === null ? '' : left >= 0 ? ` ${money(left)} left in ${name}.` : ` ⚠️ ${name} is ${money(-left)} over budget!`}`);
+      const warned = budgetWarnings(m).some(w => w.id === f.categoryId);
+      toast(`${wasEditing ? 'Expense updated.' : `Expense of ${money(amount)} added.`}${left === null || warned ? '' : ` ${money(left)} left in ${name}.`}`);
+      setTimeout(() => checkCategoryBudget(f.categoryId, m), 0);
       break;
     }
     case 'bill': {
@@ -1223,6 +1301,8 @@ function buildDemoData() {
 
 /* ---------- Init ---------- */
 render();
+dailyBudgetCheck();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
 // Refresh due-date statuses if the app is left open across midnight.
 setInterval(() => { if (!document.querySelector('form :focus')) renderAlerts(); }, 60 * 60 * 1000);
 
