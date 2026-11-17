@@ -99,6 +99,7 @@ const BADGES = [
   { id: 'streak-3', icon: 'medal', name: 'Hat Trick', desc: '3 perfect months in a row' },
   { id: 'dreamer', icon: 'flag', name: 'Dreamer', desc: 'Create a savings goal' },
   { id: 'goal-getter', icon: 'piggy', name: 'Goal Getter', desc: 'Reach a savings goal' },
+  { id: 'inspirer', icon: 'users', name: 'Inspirer', desc: 'Share your progress to inspire others' },
   { id: 'stars-25', icon: 'star', name: 'Star Collector', desc: 'Earn 25 stars' },
   { id: 'stars-100', icon: 'star', name: 'Superstar', desc: 'Earn 100 stars' },
 ];
@@ -132,6 +133,7 @@ function computeRewards() {
   if (stars >= 100) earned.add('stars-100');
   if (state.goals.length) earned.add('dreamer');
   if (goalsReached) earned.add('goal-getter');
+  if ((state.stats?.shares || 0) > 0) earned.add('inspirer');
 
   return {
     stars, monthStars, habitStars, goalStars, goalsReached, history,

@@ -24,6 +24,11 @@ const ICONS = {
   right: '<path d="M9 5l7 7-7 7"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   minus: '<path d="M5 12h14"/>',
+  share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 6 5"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>',
   plane: '<path d="M10.5 13.5 3 11l1.5-1.5 8 1 4.5-5a2 2 0 0 1 3 3l-5 4.5 1 8L18.5 22 16 14.5l-3 3v3L11.5 22l-1-3.5L7 17.5 8.5 16h3z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -60,7 +65,7 @@ function icon(name, cls = '') {
 function categoryIconName(name) {
   const n = String(name || '').toLowerCase();
   const map = [
-    [/grocer|food|market/, 'cart'], [/dining|restaurant|coffee|eat/, 'cup'], [/transport|car|gas|fuel|commute/, 'car'],
+    [/grocer|food|market/, 'cart'], [/dining|restaurant|coffee|eat/, 'cup'], [/transport|\bcars?\b|gas|fuel|commute/, 'car'],
     [/hous|rent|home/, 'home'], [/utilit|electric|water|internet|bill/, 'bolt'], [/health|medic|doctor/, 'heart'],
     [/shopping|clothes/, 'bag'], [/entertain|movie|fun|stream/, 'play'], [/educat|school|book/, 'book'],
     [/personal|care|beauty/, 'sparkle'], [/saving|invest|emergency/, 'piggy'], [/pet/, 'pet'], [/gift|donat/, 'gift'],

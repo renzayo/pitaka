@@ -743,7 +743,7 @@ function renderExpenses() {
           <td class="nowrap c-date">${fmtDay(e.date)}</td><td class="c-main">${chip(e.categoryId)}</td>
           <td class="c-desc">${esc(e.note)}</td>
           <td class="right nowrap neg c-amt">${money(e.amount)}</td>
-          <td class="actions"><button class="act-btn" data-action="edit-expense" data-id="${e.id}" aria-label="Edit" title="Edit">${icon('edit')}</button><button class="act-btn danger" data-action="del-expense" data-id="${e.id}" aria-label="Delete" title="Delete">${icon('trash')}</button></td>
+          <td class="actions"><button class="act-btn" data-share-action="open" data-tab="photo" data-id="${e.id}" aria-label="Share with a photo" title="Share with a photo">${icon('share')}</button><button class="act-btn" data-action="edit-expense" data-id="${e.id}" aria-label="Edit" title="Edit">${icon('edit')}</button><button class="act-btn danger" data-action="del-expense" data-id="${e.id}" aria-label="Delete" title="Delete">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody></table></div>` : empty('No expenses found for this month.')}
     </div>`;
 }
@@ -867,6 +867,11 @@ function renderSummary() {
   for (const [id, v] of Object.entries(spent)) byType[catById(id).type || 'want'] += v;
 
   return `
+    <div class="card share-cta">
+      <span class="goal-ic">${icon('users')}</span>
+      <span class="rs-main"><b>Inspire someone today</b><span class="small muted">Turn your progress into a carousel to post. Amounts stay hidden unless you show them.</span></span>
+      <button class="btn small" data-share-action="open" data-month="${m}">${icon('share')}Share</button>
+    </div>
     ${el > 0 && el < 1 ? `<div class="alert info small">${monthLabel(m)} is still in progress (${pct(el)} through the month). Figures and tips are based on activity so far.</div>` : ''}
     <div class="grid cols-4">
       ${stat('Income', money(inc), `${delta(inc, pInc)} vs last month`, 'pos')}
@@ -1042,6 +1047,11 @@ function renderRewards() {
           <div class="small muted">${starsText(r.nextLevel.need)} to reach ${esc(r.nextLevel.name)}</div>` : '<div class="small muted">Top level reached. Amazing!</div>'}
       </div>
     </div>
+    <div style="margin-top:16px"><div class="card share-cta">
+      <span class="goal-ic">${icon('users')}</span>
+      <span class="rs-main"><b>Inspire someone today</b><span class="small muted">Turn your progress into a carousel to post. Amounts stay hidden unless you show them.</span></span>
+      <button class="btn small" data-share-action="open" data-month="${currentMonth()}">${icon('share')}Share</button>
+    </div></div>
 
     <div class="grid cols-3" style="margin-top:16px">
       <div class="card stat"><span class="s-ic">${icon('star')}</span><div class="label">This month so far</div>
@@ -1216,7 +1226,7 @@ function openSheet() {
         <button class="sheet-btn" data-view="income">${icon('income')}Add income</button>
         <button class="sheet-btn" data-view="bills">${icon('bills')}Add bill</button>
         <button class="sheet-btn" data-action="sheet-goal">${icon('piggy')}Add to goal</button>
-        <button class="sheet-btn" data-view="budgets">${icon('budget')}Set budget</button>
+        <button class="sheet-btn" data-share-action="open">${icon('share')}Share progress</button>
       </div>
     </div>`;
   document.body.appendChild(el);

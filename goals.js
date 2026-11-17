@@ -282,6 +282,7 @@ function celebrateGoal(g) {
         <button class="btn gold" data-action="close-popup">Awesome!</button>
         <button class="btn ghost" data-action="goal-new-after">Set a new goal</button>
       </div>
+      <button class="link-btn" data-share-action="open" style="margin-top:12px">${icon('share')} Share this win and inspire others</button>
     </div>`, { confetti: true, vibrate: [40, 60, 40, 60, 80] });
 }
 
