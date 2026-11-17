@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Pitaka — Personal Finance</title>
+  <meta name="theme-color" content="#111111" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Pitaka" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <span class="brand">Pitaka</span>
+      <nav class="nav">
+        <button class="nav-btn" data-view="dashboard">Home</button>
+        <button class="nav-btn" data-view="income">Income</button>
+        <button class="nav-btn" data-view="expenses">Expenses</button>
+        <button class="nav-btn" data-view="budgets">Budgets</button>
+        <button class="nav-btn" data-view="bills">Bills</button>
+        <button class="nav-btn" data-view="summary">Summary</button>
+        <button class="nav-btn" data-view="settings">Settings</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="view-title">Home</h1>
+      <div class="month-picker" id="month-picker">
+        <button class="icon-btn" data-action="prev-month" aria-label="Previous month">‹</button>
+        <input type="month" id="month-input" aria-label="Month" />
+        <button class="icon-btn" data-action="next-month" aria-label="Next month">›</button>
+      </div>
+    </div>
+    <div id="alerts"></div>
+    <section id="view"></section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden />
+  <script src="app.js"></script>
+</body>
+</html>
