@@ -17,15 +17,16 @@
 <body>
   <header class="header">
     <div class="header-inner">
-      <span class="brand">Pitaka</span>
+      <span class="brand" data-icon="wallet">Pitaka</span>
       <nav class="nav">
-        <button class="nav-btn" data-view="dashboard">Home</button>
-        <button class="nav-btn" data-view="income">Income</button>
-        <button class="nav-btn" data-view="expenses">Expenses</button>
-        <button class="nav-btn" data-view="budgets">Budgets</button>
-        <button class="nav-btn" data-view="bills">Bills</button>
-        <button class="nav-btn" data-view="summary">Summary</button>
-        <button class="nav-btn" data-view="settings">Settings</button>
+        <button class="nav-btn" data-view="dashboard" data-icon="home"><span>Home</span></button>
+        <button class="nav-btn" data-view="income" data-icon="income"><span>Income</span></button>
+        <button class="nav-btn" data-view="expenses" data-icon="expense"><span>Expenses</span></button>
+        <button class="nav-btn" data-view="budgets" data-icon="budget"><span>Budgets</span></button>
+        <button class="nav-btn" data-view="bills" data-icon="bills"><span>Bills</span></button>
+        <button class="nav-btn" data-view="rewards" data-icon="star"><span>Rewards</span></button>
+        <button class="nav-btn" data-view="summary" data-icon="summary"><span>Summary</span></button>
+        <button class="nav-btn nav-settings" data-view="settings" data-icon="settings"><span>Settings</span></button>
       </nav>
     </div>
   </header>
@@ -33,20 +34,26 @@
   <main class="main">
     <div class="topbar">
       <h1 id="view-title">Home</h1>
-      <div class="month-picker" id="month-picker">
-        <button class="icon-btn" data-action="prev-month" aria-label="Previous month">‹</button>
-        <input type="month" id="month-input" aria-label="Month" />
-        <button class="icon-btn" data-action="next-month" aria-label="Next month">›</button>
+      <div class="topbar-right">
+        <div class="month-picker" id="month-picker">
+          <button class="icon-btn" data-action="prev-month" data-icon="left" aria-label="Previous month"></button>
+          <input type="month" id="month-input" aria-label="Month" />
+          <button class="icon-btn" data-action="next-month" data-icon="right" aria-label="Next month"></button>
+        </div>
+        <button class="icon-btn mobile-only" data-view="settings" data-icon="settings" aria-label="Settings"></button>
       </div>
     </div>
     <div id="alerts"></div>
     <section id="view"></section>
   </main>
 
+  <button class="fab" data-action="quick-add" data-icon="plus" aria-label="Quick add"></button>
   <div id="toast" role="status" aria-live="polite"></div>
   <input type="file" id="import-file" accept="application/json,.json" hidden />
   <input type="file" id="receipt-file" accept="image/*" hidden />
+  <script src="icons.js"></script>
   <script src="receipt.js"></script>
+  <script src="rewards.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

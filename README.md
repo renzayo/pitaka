@@ -26,6 +26,7 @@ Data is saved on each device separately. To move data between devices, use **Set
 | Snap a receipt | **Snap receipt** on Home or Expenses: take or pick a photo and the app fills in the store, date, total and a category guess for you to check. Text is read on the device with Tesseract.js, and the first use needs internet to download it. |
 | Set a budget for each category, per month | **Budgets** tab (budgets carry over to the next month until you change them) |
 | Track how much budget is left in each category | **Dashboard** and **Budgets** (progress bars, plus an "on pace to overspend" warning) |
+| Rewards | **Rewards** tab, where you earn stars for good habits: +1 for each category kept within budget, +3 for a perfect month, +2 for saving 20%, +1 for paying all bills on time, and +1 for every 7 days in a row of logging. Stars raise your level and unlock badges, and new ones trigger a celebration with confetti. |
 | Budget alerts | A red pop-up when an expense brings a category to 80% or more of its budget, a red banner listing those categories, and a once-a-day "Budget check" pop-up when you open the app |
 | Monthly summary and tips for next month | **Summary** tab: category breakdown, 50/30/20 check, personalized tips, suggested budgets you can apply in one click |
 | Bill due dates | **Bills** tab: monthly or one-time bills, overdue/due-soon alerts, "Mark paid" (logs the expense automatically) |

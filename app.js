@@ -60,6 +60,8 @@ function defaultState() {
     expenses: [],
     budgets: {},
     bills: [],
+    stats: { receiptsSnapped: 0 },
+    rewards: { stars: null, badges: [] },
   };
 }
 
@@ -73,6 +75,8 @@ function normalize(d) {
     expenses: Array.isArray(d.expenses) ? d.expenses : [],
     budgets: d.budgets && typeof d.budgets === 'object' ? d.budgets : {},
     bills: Array.isArray(d.bills) ? d.bills : [],
+    stats: { ...base.stats, ...(d.stats || {}) },
+    rewards: { ...base.rewards, ...(d.rewards || {}) },
   };
 }
 
@@ -87,7 +91,7 @@ function load() {
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 let state = load();
-const ui = { view: 'dashboard', month: currentMonth(), editing: { income: null, expense: null, bill: null }, expenseFilter: '', receipt: null };
+const ui = { view: 'dashboard', month: currentMonth(), editing: { income: null, expense: null, bill: null }, expenseFilter: '', receipt: null, animate: true };
 
 /* ---------- Queries ---------- */
 const catById = id => state.categories.find(c => c.id === id) || { id, name: 'Uncategorized', type: 'want', color: '#94a3b8' };
@@ -343,8 +347,16 @@ function suggestBudgets(m) {
 
 /* ---------- Rendering helpers ---------- */
 function chip(id) {
-  return esc(catById(id).name);
+  const c = catById(id);
+  return `<span class="chip"><span class="cat-ic">${icon(categoryIconName(c.name))}</span>${esc(c.name)}</span>`;
 }
+
+const h = (ic, text) => `<span class="h">${icon(ic)}${text}</span>`;
+const STAT_ICONS = {
+  'Income': 'income', 'Expenses': 'expense', 'Net balance': 'wallet', 'Budget remaining': 'budget', 'Total budgeted': 'budget',
+  'Spent (budgeted categories)': 'expense', 'Unbudgeted income': 'wallet', 'Bills this month': 'bills', 'Paid': 'check',
+  'Still to pay': 'alert', 'Net saved': 'piggy', 'Daily average spend': 'trend',
+};
 
 function categoryOptions(selected, includeBlank = false) {
   return (includeBlank ? `<option value="">All categories</option>` : '') +
@@ -362,7 +374,7 @@ function budgetRow(id, budget, spentAmt, m) {
   }
   return `
     <div class="budget-row">
-      <div class="top"><span>${chip(id)}</span><span class="nowrap"><b>${money(spentAmt)}</b> <span class="muted">/ ${money(budget)}</span></span></div>
+      <div class="top"><span class="chip">${chip(id)}${ratio <= 1 && spentAmt > 0 ? `<span title="On budget — earning a star">${icon('star', 'star-ic')}</span>` : ''}</span><span class="nowrap"><b>${money(spentAmt)}</b> <span class="muted">/ ${money(budget)}</span></span></div>
       <div class="bar ${cls}"><span style="width:${Math.min(100, ratio * 100)}%"></span></div>
       <div class="meta">
         <span class="${remaining < 0 ? 'neg' : ''}">${remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over budget`}</span>
@@ -372,7 +384,7 @@ function budgetRow(id, budget, spentAmt, m) {
 }
 
 function stat(label, value, sub = '', cls = '') {
-  return `<div class="card stat"><div class="label">${label}</div><div class="value ${cls}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  return `<div class="card stat">${STAT_ICONS[label] ? `<span class="s-ic">${icon(STAT_ICONS[label])}</span>` : ''}<div class="label">${label}</div><div class="value ${cls}">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
 }
 
 function billListItem(item, withMonth = false) {
@@ -385,14 +397,15 @@ function billListItem(item, withMonth = false) {
       </div>
       <div class="form-actions" style="align-items:center">
         <span class="badge ${status}">${statusText(item)}</span>
-        ${status !== 'paid' ? `<button class="btn small good" data-action="pay-bill" data-id="${bill.id}" data-month="${month}">Mark paid</button>` : ''}
+        ${status !== 'paid' ? `<button class="btn small good" data-action="pay-bill" data-id="${bill.id}" data-month="${month}">${icon('check')}Paid</button>` : ''}
       </div>
     </div>`;
 }
 
 const empty = text => `<div class="empty">${text}</div>`;
+const INSIGHT_ICONS = { danger: 'alert', warn: 'alert', info: 'tip', good: 'star' };
 function insightHtml(i) {
-  return `<div class="insight ${i.level}"><div class="i-title">${esc(i.title)}</div><div class="small muted">${esc(i.text)}</div></div>`;
+  return `<div class="insight ${i.level}"><div class="i-title">${icon(INSIGHT_ICONS[i.level])}${esc(i.title)}</div><div class="small muted">${esc(i.text)}</div></div>`;
 }
 
 /* ---------- Views ---------- */
@@ -424,34 +437,36 @@ function renderDashboard() {
       ${stat('Budget remaining', money(totalBudget - budgetSpent), totalBudget ? `of ${money(totalBudget)} budgeted` : 'No budgets set yet', totalBudget - budgetSpent >= 0 ? '' : 'neg')}
     </div>
 
+    ${rewardStrip()}
+
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
-        <h2>Budgets <button class="link-btn" data-view="budgets">Edit</button></h2>
+        <h2>${h('budget', 'Budgets')} <button class="link-btn" data-view="budgets">Edit</button></h2>
         ${inherited ? `<p class="small muted">Using budgets carried over from ${monthLabel(inherited)}.</p>` : ''}
         ${budgetRows || empty('No budgets yet. <button class="link-btn" data-view="budgets">Set your budgets</button>')}
       </div>
 
       <div class="card">
-        <h2>Upcoming bills <button class="link-btn" data-view="bills">All bills</button></h2>
+        <h2>${h('bills', 'Upcoming bills')} <button class="link-btn" data-view="bills">All bills</button></h2>
         ${attention.length ? attention.map(a => billListItem(a, true)).join('') : empty(state.bills.length ? 'No bills due in the next 14 days.' : 'No bills yet. <button class="link-btn" data-view="bills">Add a bill</button>')}
       </div>
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h2>Recent activity
+      <h2>${h('trend', 'Recent activity')}
         <span class="form-actions">
-          <button class="btn small" data-view="expenses">Add expense</button>
-          <button class="btn small ghost" data-action="snap-receipt">Snap receipt</button>
-          <button class="btn small ghost" data-view="income">Add income</button>
+          <button class="btn small" data-view="expenses">${icon('plus')}Add expense</button>
+          <button class="btn small ghost" data-action="snap-receipt">${icon('camera')}Snap receipt</button>
+          <button class="btn small ghost" data-view="income">${icon('plus')}Add income</button>
         </span>
       </h2>
-      ${recent.length ? `<div class="table-wrap"><table>
+      ${recent.length ? `<div class="table-wrap"><table class="tx">
         <thead><tr><th>Date</th><th>Description</th><th>Category / Source</th><th class="right">Amount</th></tr></thead>
         <tbody>${recent.map(r => `<tr>
-          <td class="nowrap">${fmtDay(r.date)}</td>
-          <td>${esc(r.note || (r.kind === 'income' ? r.source : '')) || '<span class="muted">—</span>'}</td>
-          <td>${r.kind === 'income' ? esc(r.source) : chip(r.categoryId)}</td>
-          <td class="right nowrap ${r.kind === 'income' ? 'pos' : 'neg'}">${r.kind === 'income' ? '+' : '−'}${money(r.amount)}</td>
+          <td class="nowrap c-date">${fmtDay(r.date)}</td>
+          <td class="c-desc">${esc(r.note || (r.kind === 'income' ? r.source : '')) || '<span class="muted">—</span>'}</td>
+          <td class="c-main">${r.kind === 'income' ? `<span class="chip"><span class="cat-ic">${icon('income')}</span>${esc(r.source)}</span>` : chip(r.categoryId)}</td>
+          <td class="right nowrap c-amt ${r.kind === 'income' ? 'pos' : 'neg'}">${r.kind === 'income' ? '+' : '−'}${money(r.amount)}</td>
         </tr>`).join('')}</tbody></table></div>` : empty(`No transactions in ${monthLabel(m)} yet.`)}
     </div>`;
 }
@@ -471,7 +486,7 @@ function renderIncome() {
 
   return `
     <div class="card">
-      <h2>${editing ? 'Edit income' : 'Log income'}</h2>
+      <h2>${h('income', editing ? 'Edit income' : 'Log income')}</h2>
       <form class="form" data-form="income">
         <label class="field">Date<input type="date" name="date" required value="${editing ? editing.date : defaultDateFor(m)}"></label>
         <label class="field">Source<input name="source" list="sources" required placeholder="e.g. Salary, Freelance" value="${esc(editing?.source || '')}"></label>
@@ -487,17 +502,17 @@ function renderIncome() {
 
     <div class="grid cols-3" style="margin-top:16px">
       <div class="card span-2">
-        <h2>Income for ${monthLabel(m)} <span class="pos">${money(total)}</span></h2>
-        ${items.length ? `<div class="table-wrap"><table>
+        <h2>${h('income', `Income for ${monthLabel(m)}`)} <span class="pos">${money(total)}</span></h2>
+        ${items.length ? `<div class="table-wrap"><table class="tx">
           <thead><tr><th>Date</th><th>Source</th><th>Note</th><th class="right">Amount</th><th></th></tr></thead>
           <tbody>${items.map(i => `<tr>
-            <td class="nowrap">${fmtDay(i.date)}</td><td>${esc(i.source)}</td><td class="muted">${esc(i.note)}</td>
-            <td class="right nowrap pos">${money(i.amount)}</td>
-            <td class="actions"><button class="link-btn" data-action="edit-income" data-id="${i.id}">Edit</button><button class="link-btn danger" data-action="del-income" data-id="${i.id}">Delete</button></td>
+            <td class="nowrap c-date">${fmtDay(i.date)}</td><td class="c-main"><span class="chip"><span class="cat-ic">${icon('income')}</span>${esc(i.source)}</span></td><td class="muted c-desc">${esc(i.note)}</td>
+            <td class="right nowrap pos c-amt">${money(i.amount)}</td>
+            <td class="actions"><button class="act-btn" data-action="edit-income" data-id="${i.id}" aria-label="Edit" title="Edit">${icon('edit')}</button><button class="act-btn danger" data-action="del-income" data-id="${i.id}" aria-label="Delete" title="Delete">${icon('trash')}</button></td>
           </tr>`).join('')}</tbody></table></div>` : empty('No income logged for this month.')}
       </div>
       <div class="card">
-        <h2>By source</h2>
+        <h2>${h('wallet', 'By source')}</h2>
         ${Object.keys(bySource).length ? Object.entries(bySource).sort((a, b) => b[1] - a[1]).map(([s, v]) => `
           <div class="list-item"><span>${esc(s)}</span><span class="nowrap"><b>${money(v)}</b> <span class="muted small">${pct(v / total)}</span></span></div>`).join('') : empty('—')}
       </div>
@@ -652,8 +667,8 @@ function renderExpenses() {
 
   return `
     <div class="card">
-      <h2>${editing ? 'Edit expense' : 'Log expense'}
-        ${editing ? '' : '<button class="btn small ghost" type="button" data-action="snap-receipt">Snap receipt</button>'}
+      <h2>${h('expense', editing ? 'Edit expense' : 'Log expense')}
+        ${editing ? '' : `<button class="btn small ghost" type="button" data-action="snap-receipt">${icon('camera')}Snap receipt</button>`}
       </h2>
       ${editing ? '' : receiptPanel()}
       <form class="form" data-form="expense">
@@ -671,16 +686,16 @@ function renderExpenses() {
 
     <div class="card" style="margin-top:16px">
       <h2>
-        <span>Expenses for ${monthLabel(m)} <span class="neg">${money(total)}</span></span>
+        <span class="h">${icon('expense')}<span>Expenses for ${monthLabel(m)} <span class="neg">${money(total)}</span></span></span>
         <select id="expense-filter" aria-label="Filter by category">${categoryOptions(ui.expenseFilter, true)}</select>
       </h2>
-      ${items.length ? `<div class="table-wrap"><table>
+      ${items.length ? `<div class="table-wrap"><table class="tx">
         <thead><tr><th>Date</th><th>Category</th><th>Description</th><th class="right">Amount</th><th></th></tr></thead>
         <tbody>${items.map(e => `<tr>
-          <td class="nowrap">${fmtDay(e.date)}</td><td>${chip(e.categoryId)}</td>
-          <td>${esc(e.note)}</td>
-          <td class="right nowrap neg">${money(e.amount)}</td>
-          <td class="actions"><button class="link-btn" data-action="edit-expense" data-id="${e.id}">Edit</button><button class="link-btn danger" data-action="del-expense" data-id="${e.id}">Delete</button></td>
+          <td class="nowrap c-date">${fmtDay(e.date)}</td><td class="c-main">${chip(e.categoryId)}</td>
+          <td class="c-desc">${esc(e.note)}</td>
+          <td class="right nowrap neg c-amt">${money(e.amount)}</td>
+          <td class="actions"><button class="act-btn" data-action="edit-expense" data-id="${e.id}" aria-label="Edit" title="Edit">${icon('edit')}</button><button class="act-btn danger" data-action="del-expense" data-id="${e.id}" aria-label="Delete" title="Delete">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody></table></div>` : empty('No expenses found for this month.')}
     </div>`;
 }
@@ -702,7 +717,7 @@ function renderBudgets() {
 
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
-        <h2>Set budgets for ${monthLabel(m)}</h2>
+        <h2>${h('budget', `Set budgets for ${monthLabel(m)}`)}</h2>
         ${inherited ? `<p class="alert info small">These amounts are carried over from ${monthLabel(inherited)}. Saving will set budgets specifically for ${monthLabel(m)}.</p>` : ''}
         <form data-form="budgets">
           <div class="table-wrap"><table>
@@ -722,7 +737,7 @@ function renderBudgets() {
       </div>
 
       <div class="card">
-        <h2>Remaining budget</h2>
+        <h2>${h('wallet', 'Remaining budget')}</h2>
         ${ids.length ? ids.map(id => budgetRow(id, budgets[id], spent[id] || 0, m)).join('') : empty('Enter amounts on the left to start tracking.')}
       </div>
     </div>`;
@@ -739,7 +754,7 @@ function renderBills() {
 
   return `
     <div class="card">
-      <h2>${editing ? 'Edit bill' : 'Add a bill'}</h2>
+      <h2>${h('bills', editing ? 'Edit bill' : 'Add a bill')}</h2>
       <form class="form" data-form="bill">
         <label class="field">Bill name<input name="name" required placeholder="e.g. Electricity" value="${esc(editing?.name || '')}"></label>
         <label class="field">Amount<input type="number" inputmode="decimal" name="amount" min="0.01" step="0.01" required value="${editing?.amount ?? ''}"></label>
@@ -766,21 +781,21 @@ function renderBills() {
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h2>Bills for ${monthLabel(m)}</h2>
-      ${rows.length ? `<div class="table-wrap"><table>
+      <h2>${h('calendarCheck', `Bills for ${monthLabel(m)}`)}</h2>
+      ${rows.length ? `<div class="table-wrap"><table class="tx">
         <thead><tr><th>Due</th><th>Bill</th><th>Category</th><th class="right">Amount</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map(r => `<tr>
-          <td class="nowrap">${fmtDay(r.due)}</td>
-          <td><b>${esc(r.bill.name)}</b><div class="small muted">${r.bill.recurrence === 'once' ? 'One time' : `Monthly, day ${r.bill.dueDay}`}</div></td>
-          <td>${chip(r.bill.categoryId)}</td>
-          <td class="right nowrap">${money(r.bill.amount)}</td>
-          <td><span class="badge ${r.status}">${statusText(r)}</span></td>
+          <td class="nowrap c-date">${fmtDay(r.due)}</td>
+          <td class="c-main"><b>${esc(r.bill.name)}</b><div class="small muted">${r.bill.recurrence === 'once' ? 'One time' : `Monthly, day ${r.bill.dueDay}`}</div></td>
+          <td class="c-cat">${chip(r.bill.categoryId)}</td>
+          <td class="right nowrap c-amt">${money(r.bill.amount)}</td>
+          <td class="c-desc"><span class="badge ${r.status}">${statusText(r)}</span></td>
           <td class="actions">
             ${r.status === 'paid'
               ? `<button class="link-btn" data-action="unpay-bill" data-id="${r.bill.id}" data-month="${m}">Undo</button>`
-              : `<button class="btn small good" data-action="pay-bill" data-id="${r.bill.id}" data-month="${m}">Mark paid</button>`}
-            <button class="link-btn" data-action="edit-bill" data-id="${r.bill.id}">Edit</button>
-            <button class="link-btn danger" data-action="del-bill" data-id="${r.bill.id}">Delete</button>
+              : `<button class="btn small good" data-action="pay-bill" data-id="${r.bill.id}" data-month="${m}">${icon('check')}Mark paid</button>`}
+            <button class="act-btn" data-action="edit-bill" data-id="${r.bill.id}" aria-label="Edit" title="Edit">${icon('edit')}</button>
+            <button class="act-btn danger" data-action="del-bill" data-id="${r.bill.id}" aria-label="Delete" title="Delete">${icon('trash')}</button>
           </td>
         </tr>`).join('')}</tbody></table></div>` : empty(state.bills.length ? 'No bills due this month.' : 'Add your recurring bills (rent, electricity, internet, loans…) to track due dates.')}
     </div>`;
@@ -813,7 +828,7 @@ function renderSummary() {
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h2>Where your money went</h2>
+      <h2>${h('summary', 'Where your money went')}</h2>
       ${exp ? spentIds.map(id => `
         <div class="budget-row">
           <div class="top"><span>${chip(id)}</span><span class="nowrap">${money(spent[id])} <span class="muted small">${pct(spent[id] / exp)}</span></span></div>
@@ -823,7 +838,7 @@ function renderSummary() {
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h2>Category breakdown</h2>
+      <h2>${h('budget', 'Category breakdown')}</h2>
       ${ids.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Category</th><th class="right">Spent</th><th class="right">Budget</th><th class="right">Difference</th><th class="right">Last month</th><th class="right">Change</th></tr></thead>
         <tbody>${ids.map(id => {
@@ -843,11 +858,11 @@ function renderSummary() {
 
     <div class="grid cols-2" style="margin-top:16px">
       <div class="card">
-        <h2>How to improve next month</h2>
+        <h2>${h('tip', 'How to improve next month')}</h2>
         ${insights.map(insightHtml).join('')}
       </div>
       <div class="card">
-        <h2>Suggested budgets for ${monthLabel(next)}</h2>
+        <h2>${h('trend', `Suggested budgets for ${monthLabel(next)}`)}</h2>
         ${sugg.rows.length ? `
           <p class="small muted">Based on ${sugg.monthsUsed > 1 ? `your last ${sugg.monthsUsed} months` : 'this month'} of spending. "Want" categories are trimmed 10% to help you save more.</p>
           <div class="table-wrap"><table>
@@ -876,14 +891,14 @@ function renderSettings() {
   return `
     <div class="grid cols-2">
       <div class="card">
-        <h2>Categories</h2>
+        <h2>${h('dots', 'Categories')}</h2>
         <div class="table-wrap"><table>
           <thead><tr><th>Name</th><th>Type</th><th class="right">Used</th><th></th></tr></thead>
           <tbody>${state.categories.map(c => `<tr>
             <td><input value="${esc(c.name)}" data-cat="${c.id}" data-field="name" aria-label="Name" style="width:100%"></td>
             <td><select data-cat="${c.id}" data-field="type" aria-label="Type">${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${c.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
             <td class="right muted">${counts[c.id] || 0}</td>
-            <td class="actions"><button class="link-btn danger" data-action="del-category" data-id="${c.id}">Delete</button></td>
+            <td class="actions"><button class="act-btn danger" data-action="del-category" data-id="${c.id}" aria-label="Delete" title="Delete">${icon('trash')}</button></td>
           </tr>`).join('')}</tbody>
         </table></div>
         <form class="form" data-form="category" style="margin-top:12px">
@@ -896,13 +911,13 @@ function renderSettings() {
 
       <div class="stack">
         <div class="card">
-          <h2>Preferences</h2>
+          <h2>${h('settings', 'Preferences')}</h2>
           <label class="field">Currency
             <select id="currency">${currencyList.map(c => `<option ${c === cur ? 'selected' : ''}>${c}</option>`).join('')}</select>
           </label>
         </div>
         <div class="card">
-          <h2>Your data</h2>
+          <h2>${h('wallet', 'Your data')}</h2>
           <p class="small muted">Everything is stored locally in this browser. Export a backup regularly, especially before clearing browser data.</p>
           <div class="form-actions" style="flex-wrap:wrap">
             <button class="btn" data-action="export">Export backup</button>
@@ -922,8 +937,224 @@ const VIEWS = {
   budgets: ['Budgets', renderBudgets],
   bills: ['Bills', renderBills],
   summary: ['Monthly Summary', renderSummary],
+  rewards: ['Rewards', renderRewards],
   settings: ['Settings', renderSettings],
 };
+
+/* ---------- Rewards view ---------- */
+const starsText = n => `${n} star${n === 1 ? '' : 's'}`;
+
+function rewardStrip() {
+  const r = computeRewards();
+  const cur = r.current;
+  return `
+    <button class="card reward-strip" data-view="rewards" style="margin-top:16px">
+      <span class="rs-star">${icon('star', 'star-fill')}</span>
+      <span class="rs-main">
+        <b><span data-count="${r.stars}">${r.stars}</span> stars</b> · Level ${r.level} ${esc(r.levelName)}
+        <span class="small muted">${cur ? `This month: on track for ${starsText(cur.total)}` : 'Set budgets to start earning stars'}</span>
+      </span>
+      ${r.logStreak.current ? `<span class="rs-streak">${icon('flame')}${r.logStreak.current}-day streak</span>` : ''}
+      <span class="rs-go">${icon('right')}</span>
+    </button>`;
+}
+
+function renderRewards() {
+  const r = computeRewards();
+  const cur = r.current;
+  const curMonth = currentMonth();
+  const { budgets } = budgetsFor(curMonth);
+  const spent = spentByCategory(curMonth);
+  const offTrack = Object.keys(budgets).filter(id => budgets[id] > 0 && (spent[id] || 0) > budgets[id]);
+  const earnedBadges = r.badges.filter(b => b.earned).length;
+
+  return `
+    <div class="card reward-hero">
+      <div class="hero-star">${icon('star', 'big-star')}</div>
+      <div class="hero-body">
+        <div class="count"><span data-count="${r.stars}">${r.stars}</span> <span class="muted small">stars</span></div>
+        <div><b>Level ${r.level} · ${esc(r.levelName)}</b></div>
+        ${r.nextLevel ? `
+          <div class="bar level-bar"><span style="width:${Math.round(r.nextLevel.progress * 100)}%"></span></div>
+          <div class="small muted">${starsText(r.nextLevel.need)} to reach ${esc(r.nextLevel.name)}</div>` : '<div class="small muted">Top level reached. Amazing!</div>'}
+      </div>
+    </div>
+
+    <div class="grid cols-3" style="margin-top:16px">
+      <div class="card stat"><span class="s-ic">${icon('star')}</span><div class="label">This month so far</div>
+        <div class="value gold">${cur ? starsText(cur.total) : '—'}</div>
+        <div class="sub">${cur ? `out of ${cur.possible} possible · added when the month ends` : 'Set budgets to start earning'}</div></div>
+      <div class="card stat"><span class="s-ic">${icon('flame')}</span><div class="label">Logging streak</div>
+        <div class="value">${r.logStreak.current} day${r.logStreak.current === 1 ? '' : 's'}</div>
+        <div class="sub">Best: ${r.logStreak.best} days · +1 star every 7 days in a row</div></div>
+      <div class="card stat"><span class="s-ic">${icon('trophy')}</span><div class="label">Perfect months in a row</div>
+        <div class="value">${r.perfectStreak.current}</div>
+        <div class="sub">Best: ${r.perfectStreak.best}</div></div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:16px">
+      <div class="card">
+        <h2>${h('calendarCheck', `${monthLabel(curMonth)} progress`)}</h2>
+        ${cur ? `
+          ${cur.items.map(i => `<div class="list-item"><span>${esc(i.label)}</span><span class="stars">+${i.stars}${icon('star', 'star-ic')}</span></div>`).join('')}
+          ${offTrack.map(id => `<div class="list-item"><span class="muted">${chip(id)} is over budget — no star yet</span><span class="muted">+0</span></div>`).join('')}
+          <p class="small muted" style="margin:10px 0 0">${offTrack.length ? 'Spend less in the categories above next month to win their stars back.' : cur.perfect ? 'Every category is on budget. Keep going for the Perfect Month bonus!' : ''}</p>`
+          : empty('Set budgets for this month to start earning stars. <button class="link-btn" data-view="budgets">Set budgets</button>')}
+      </div>
+      <div class="card">
+        <h2>${h('tip', 'How to earn stars')}</h2>
+        <div class="list-item"><span>Each category that stays within budget for the month</span><span class="stars">+1${icon('star', 'star-ic')}</span></div>
+        <div class="list-item"><span>Perfect month: every category on budget</span><span class="stars">+3${icon('star', 'star-ic')}</span></div>
+        <div class="list-item"><span>Save 20% or more of your income</span><span class="stars">+2${icon('star', 'star-ic')}</span></div>
+        <div class="list-item"><span>Pay every bill on time</span><span class="stars">+1${icon('star', 'star-ic')}</span></div>
+        <div class="list-item"><span>Log something 7 days in a row</span><span class="stars">+1${icon('star', 'star-ic')}</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>${h('medal', 'Badges')} <span class="small muted">${earnedBadges} of ${r.badges.length}</span></h2>
+      <div class="badge-grid">${r.badges.map(b => `
+        <div class="badge-card ${b.earned ? '' : 'locked'}">
+          <div class="b-ic">${icon(b.earned ? b.icon : 'lock')}</div>
+          <div class="b-name">${esc(b.name)}</div>
+          <div class="b-desc">${esc(b.desc)}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>${h('trophy', 'Stars by month')}</h2>
+      ${r.history.length ? r.history.map(m => `
+        <div class="list-item">
+          <span><b>${monthLabel(m.month)}</b><div class="small muted">${m.within} of ${m.budgeted} categories on budget${m.perfect ? ' · Perfect month' : ''}${m.saver ? ' · Saved 20%+' : ''}${m.billsOnTime ? ' · Bills on time' : ''}</div></span>
+          <span class="stars">${m.total}${icon('star', 'star-ic')}</span>
+        </div>`).join('') : empty('Your first stars arrive at the end of this month.')}
+      ${r.habitStars ? `<div class="list-item"><span><b>Logging streaks</b><div class="small muted">1 star for every 7 days in a row</div></span><span class="stars">${r.habitStars}${icon('star', 'star-ic')}</span></div>` : ''}
+    </div>`;
+}
+
+/* ---------- Pop-ups, celebrations, animations ---------- */
+const popupQueue = [];
+
+/** Short vibration on phones that support it (only after the user has tapped something). */
+function buzz(pattern) {
+  if (navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(pattern);
+}
+
+function openPopup(inner, opts = {}) {
+  if ($('#popup')) { popupQueue.push([inner, opts]); return; }
+  const el = document.createElement('div');
+  el.id = 'popup';
+  el.className = 'popup-backdrop';
+  el.innerHTML = inner;
+  document.body.appendChild(el);
+  el.querySelector('.btn')?.focus();
+  if (opts.confetti) confetti();
+  if (opts.vibrate) buzz(opts.vibrate);
+}
+
+function closePopup() {
+  $('#popup')?.remove();
+  const next = popupQueue.shift();
+  if (next) setTimeout(() => openPopup(...next), 200);
+}
+
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function confetti() {
+  if (reduceMotion()) return;
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  const colors = ['#f5b301', '#22c55e', '#3b82f6', '#ef4444', '#a855f7', '#f97316'];
+  for (let i = 0; i < 60; i++) {
+    const p = document.createElement('i');
+    p.style.left = `${Math.random() * 100}%`;
+    p.style.background = colors[i % colors.length];
+    p.style.animationDuration = `${1.4 + Math.random() * 1.4}s`;
+    p.style.animationDelay = `${Math.random() * 0.4}s`;
+    p.style.transform = `rotate(${Math.random() * 360}deg)`;
+    box.appendChild(p);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 3500);
+}
+
+const CHEERS = [
+  'Great job sticking to your plan!',
+  'Small wins add up. Keep it going!',
+  'Your future self says thank you!',
+  'You are building great money habits!',
+];
+
+/** Compare rewards with what the user has already seen and celebrate anything new. */
+function checkRewards() {
+  const r = computeRewards();
+  const seen = state.rewards || {};
+  const earnedIds = r.badges.filter(b => b.earned).map(b => b.id);
+  const newBadges = r.badges.filter(b => b.earned && !(seen.badges || []).includes(b.id));
+  const newStars = seen.stars == null ? r.stars : r.stars - seen.stars;
+  if (seen.stars === r.stars && !newBadges.length && (seen.badges || []).length === earnedIds.length) return;
+  state.rewards = { stars: r.stars, badges: earnedIds };
+  save();
+  if (newStars <= 0 && !newBadges.length) return;
+
+  const title = newStars > 0 ? `You earned ${starsText(newStars)}!` : `Badge unlocked!`;
+  openPopup(`
+    <div class="popup celebrate" role="alertdialog" aria-modal="true" aria-labelledby="popup-title">
+      <div class="hero-star">${icon('star', 'big-star')}</div>
+      <div class="popup-title" id="popup-title">${title}</div>
+      <p class="small muted" style="margin:0 0 12px">${CHEERS[Math.floor(Math.random() * CHEERS.length)]}</p>
+      ${newBadges.map(b => `<div class="badge-line"><span class="b-ic">${icon(b.icon)}</span><span><b>${esc(b.name)}</b><span class="small muted"> · ${esc(b.desc)}</span></span></div>`).join('')}
+      <div class="small" style="margin:12px 0 14px">Total: <b>${starsText(r.stars)}</b> · Level ${r.level} ${esc(r.levelName)}</div>
+      <div class="form-actions">
+        <button class="btn gold" data-action="close-popup">Awesome!</button>
+        <button class="btn ghost" data-action="popup-rewards">See rewards</button>
+      </div>
+    </div>`, { confetti: true, vibrate: [30, 40, 30] });
+}
+
+/** Count numbers up from zero when a screen opens. */
+function animateCounts(root) {
+  if (reduceMotion()) return;
+  root.querySelectorAll('.stat .value, [data-count]').forEach(el => {
+    if (el.querySelector('[data-count]')) return;
+    const text = el.textContent.trim();
+    let target, fmt;
+    if (el.dataset.count != null) { target = Number(el.dataset.count); fmt = n => String(Math.round(n)); }
+    else {
+      target = parseFloat(text.replace(/[^\d.-]/g, ''));
+      if (!Number.isFinite(target) || money(target) !== text) return;
+      fmt = money;
+    }
+    const start = performance.now();
+    const step = now => {
+      const t = Math.min(1, (now - start) / 650);
+      el.textContent = fmt(target * (1 - Math.pow(1 - t, 3)));
+      if (t < 1) requestAnimationFrame(step); else el.textContent = text;
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------- Quick-add sheet (phone) ---------- */
+function openSheet() {
+  closeSheet();
+  const el = document.createElement('div');
+  el.id = 'sheet';
+  el.className = 'sheet-backdrop';
+  el.innerHTML = `
+    <div class="sheet" role="dialog" aria-label="Quick add">
+      <div class="sheet-grip"></div>
+      <div class="sheet-grid">
+        <button class="sheet-btn" data-view="expenses">${icon('expense')}Add expense</button>
+        <button class="sheet-btn" data-action="snap-receipt">${icon('camera')}Snap receipt</button>
+        <button class="sheet-btn" data-view="income">${icon('income')}Add income</button>
+        <button class="sheet-btn" data-view="bills">${icon('bills')}Add bill</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+function closeSheet() { $('#sheet')?.remove(); }
 
 /* ---------- Budget warnings ---------- */
 const NEAR_LIMIT = 0.8; // warn at 80% of a category budget
@@ -945,21 +1176,12 @@ function warningText(w) {
   return `${pct(w.ratio)} used — only ${money(w.budget - w.spent)} left`;
 }
 
-function closePopup() {
-  const el = $('#popup');
-  if (el) el.remove();
-}
-
 function showBudgetPopup(list, title) {
   if (!list.length) return;
-  closePopup();
   const anyOver = list.some(w => w.spent > w.budget);
-  const el = document.createElement('div');
-  el.id = 'popup';
-  el.className = 'popup-backdrop';
-  el.innerHTML = `
+  openPopup(`
     <div class="popup" role="alertdialog" aria-modal="true" aria-labelledby="popup-title">
-      <div class="popup-title" id="popup-title">${esc(title || (anyOver ? 'Over budget' : 'Almost at your budget'))}</div>
+      <div class="popup-title" id="popup-title">${icon('alert')}${esc(title || (anyOver ? 'Over budget' : 'Almost at your budget'))}</div>
       <ul class="popup-list">${list.map(w => `
         <li>
           <div class="row"><b>${esc(w.name)}</b><span class="nowrap">${money(w.spent)} / ${money(w.budget)}</span></div>
@@ -971,10 +1193,7 @@ function showBudgetPopup(list, title) {
         <button class="btn danger-solid" data-action="close-popup">OK</button>
         <button class="btn ghost" data-action="popup-budgets">See budgets</button>
       </div>
-    </div>`;
-  document.body.appendChild(el);
-  el.querySelector('[data-action=close-popup]').focus();
-  if (navigator.vibrate) navigator.vibrate(150);
+    </div>`, { vibrate: 150 });
 }
 
 /** After spending in a category, pop up if it is now near or over budget. Returns true if shown. */
@@ -1012,9 +1231,17 @@ function render() {
   const [title, fn] = VIEWS[ui.view];
   $('#view-title').textContent = title;
   $('#month-input').value = ui.month;
-  $('#month-picker').hidden = ui.view === 'settings';
+  $('#month-picker').hidden = ui.view === 'settings' || ui.view === 'rewards';
   renderAlerts();
-  $('#view').innerHTML = fn();
+  const view = $('#view');
+  view.innerHTML = fn();
+  view.classList.remove('enter');
+  if (ui.animate) {
+    void view.offsetWidth; // restart the entrance animation
+    view.classList.add('enter');
+    animateCounts(view);
+    ui.animate = false;
+  }
 }
 
 /* ---------- Toast ---------- */
@@ -1029,7 +1256,9 @@ function toast(msg) {
 
 /* ---------- Events ---------- */
 function go(view) {
+  closeSheet();
   ui.view = view;
+  ui.animate = true;
   ui.editing = { income: null, expense: null, bill: null };
   render();
   window.scrollTo({ top: 0 });
@@ -1037,6 +1266,7 @@ function go(view) {
 
 document.addEventListener('click', e => {
   if (e.target.id === 'popup') { closePopup(); return; }
+  if (e.target.id === 'sheet') { closeSheet(); return; }
   const viewBtn = e.target.closest('[data-view]');
   if (viewBtn) { go(viewBtn.dataset.view); return; }
   const btn = e.target.closest('[data-action]');
@@ -1044,8 +1274,10 @@ document.addEventListener('click', e => {
   const { action, id, month, kind } = btn.dataset;
 
   switch (action) {
-    case 'prev-month': ui.month = shiftMonth(ui.month, -1); break;
-    case 'next-month': ui.month = shiftMonth(ui.month, 1); break;
+    case 'prev-month': ui.month = shiftMonth(ui.month, -1); ui.animate = true; break;
+    case 'next-month': ui.month = shiftMonth(ui.month, 1); ui.animate = true; break;
+    case 'quick-add': openSheet(); return;
+    case 'popup-rewards': closePopup(); go('rewards'); return;
     case 'this-month': ui.month = currentMonth(); break;
     case 'cancel-edit': ui.editing[kind] = null; break;
     case 'edit-income': ui.editing.income = id; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return;
@@ -1064,7 +1296,7 @@ document.addEventListener('click', e => {
       }
       save(); toast('Expense deleted.'); break;
     }
-    case 'pay-bill': markBillPaid(id, month); break;
+    case 'pay-bill': markBillPaid(id, month); buzz(15); break;
     case 'unpay-bill': unmarkBillPaid(id, month); break;
     case 'del-bill': {
       const bill = state.bills.find(b => b.id === id);
@@ -1092,7 +1324,7 @@ document.addEventListener('click', e => {
     }
     case 'close-popup': closePopup(); return;
     case 'popup-budgets': closePopup(); ui.month = currentMonth(); go('budgets'); return;
-    case 'snap-receipt': $('#receipt-file').click(); return;
+    case 'snap-receipt': closeSheet(); $('#receipt-file').click(); return;
     case 'discard-receipt': discardReceipt(); break;
     case 'export': exportData(); return;
     case 'import': $('#import-file').click(); return;
@@ -1105,6 +1337,7 @@ document.addEventListener('click', e => {
     default: return;
   }
   render();
+  checkRewards();
 });
 
 document.addEventListener('submit', e => {
@@ -1130,7 +1363,11 @@ document.addEventListener('submit', e => {
       const data = { date: f.date, categoryId: f.categoryId, amount, note: f.note.trim() };
       const wasEditing = ui.editing.expense;
       if (wasEditing) Object.assign(state.expenses.find(x => x.id === wasEditing), data);
-      else { state.expenses.push({ id: uid(), ...data }); discardReceipt(); }
+      else {
+        state.expenses.push({ id: uid(), ...data });
+        if (ui.receipt?.status === 'done') state.stats.receiptsSnapped = (state.stats.receiptsSnapped || 0) + 1;
+        discardReceipt();
+      }
       ui.editing.expense = null;
       const m = monthOf(f.date);
       if (m !== ui.month) ui.month = m;
@@ -1179,6 +1416,8 @@ document.addEventListener('submit', e => {
   }
   save();
   render();
+  buzz(15);
+  checkRewards();
 });
 
 document.addEventListener('change', e => {
@@ -1300,9 +1539,11 @@ function buildDemoData() {
 }
 
 /* ---------- Init ---------- */
+document.querySelectorAll('[data-icon]').forEach(el => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
 render();
+checkRewards();
 dailyBudgetCheck();
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closePopup(); closeSheet(); } });
 // Refresh due-date statuses if the app is left open across midnight.
 setInterval(() => { if (!document.querySelector('form :focus')) renderAlerts(); }, 60 * 60 * 1000);
 
